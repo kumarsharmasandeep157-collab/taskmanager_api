@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Task Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container py-5" style="max-width:700px;">
+        <h2 class="mb-4">&#x1F4CB; Task Manager</h2>
+        
+        <div id="loginSection" class="card p-4 mb-4">
+            <h5>Login</h5>
+            <input id="username" class="form-control mb-2" placeholder="Username">
+            <input id="password" type="password" class="form-control mb-2" placeholder="Password">
+            <button onclick="login()" class="btn btn-primary">Login</button>
+            <p id="loginMsg" class="text-danger mt-2"></p>
+        </div>
+        
+        <div id="taskSection" style="display:none;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5>My Tasks <span id="taskCount" class="badge bg-primary">0</span></h5>
+                <button onclick="logout()" class="btn btn-sm btn-outline-danger">Logout</button>
+            </div>
+            
+            <div class="input-group mb-3">
+                <input id="newTask" class="form-control" placeholder="New task title...">
+                <button onclick="createTask()" class="btn btn-success">Add</button>
+            </div>
+            
+            <div id="taskList"></div>
+        </div>
+    </div>
+
+    <script>
+        const API = 'http://127.0.0.1:8000/api';
+        let authToken = localStorage.getItem('token') || '';
+
+        const headers = () => ({
+            'Content-Type': 'application/json',
+            'Authorization': authToken ? `Token ${authToken}` : ''
+        });
+
+        async function login() {
+            const res = await fetch(`${API}/auth/login/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: document.getElementById('username').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                authToken = data.token;
+                localStorage.setItem('token', authToken);
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('taskSection').style.display = 'block';
+                loadTasks();
+            } else {
+                document.getElementById('loginMsg').textContent = data.error || 'Login failed';
+            }
+        }
+
+        async function loadTasks() {
+            const res = await fetch(`${API}/tasks/`, { headers: headers() });
+            const data = await res.json();
+            const tasks = data.results || data;
+            document.getElementById('taskCount').textContent = tasks.length;
+            
+            const listHTML = tasks.map(task => `
+                <div class="card mb-2 shadow-sm">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="${task.status === 'completed' ? 'text-decoration-line-through text-muted' : ''}">
+                                ${task.title}
+                            </span>
+                            <span class="badge ms-2 bg-${task.priority === 'high' ? 'danger' : 'secondary'}">
+                                ${task.priority}
+                            </span>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button onclick="completeTask(${task.id})" class="btn btn-sm btn-outline-success">Done</button>
+                            <button onclick="deleteTask(${task.id})" class="btn btn-sm btn-outline-danger">Del</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('taskList').innerHTML = listHTML;
+        }
+
+        async function createTask() {
+            const title = document.getElementById('newTask').value.trim();
+            if (!title) return;
+            await fetch(`${API}/tasks/`, {
+                method: 'POST',
+                headers: headers(),
+                body: JSON.stringify({ title: title, priority: 'medium' })
+            });
+            document.getElementById('newTask').value = '';
+            loadTasks();
+        }
+
+        async function completeTask(id) {
+            await fetch(`${API}/tasks/${id}/complete/`, { method: 'POST', headers: headers() });
+            loadTasks();
+        }
+
+        async function deleteTask(id) {
+            if (confirm('Delete this task?')) {
+                await fetch(`${API}/tasks/${id}/`, { method: 'DELETE', headers: headers() });
+                loadTasks();
+            }
+        }
+
+        async function logout() {
+            authToken = '';
+            localStorage.removeItem('token');
+            location.reload();
+        }
+
+        if (authToken) {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('taskSection').style.display = 'block';
+            loadTasks();
+        }
+    </script>
+</body>
+</html>
